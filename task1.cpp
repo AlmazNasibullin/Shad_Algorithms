@@ -9,14 +9,13 @@ public:
     FootballPlayer(long long efficiency, int index);
     long long getEfficiency() const;
     int getIndex() const;
-    bool operator < (const FootballPlayer& footballPlayer) const;
 
 private:
     long long efficiency_;
     int index_;
 };
 
-bool compareFootballPlayers(const FootballPlayer& firstFootballPlayer,
+bool compareFootballPlayersOnEffEctiveness(const FootballPlayer& firstFootballPlayer,
     const FootballPlayer& secondFootballPlayer);
 
 std::vector<FootballPlayer> readFootballPlayers();
@@ -28,19 +27,17 @@ void Merge(RandomAccessIterator first, RandomAccessIterator medium,
 template <class RandomAccessIterator, class Compare>
 void Mergesort(RandomAccessIterator first, RandomAccessIterator last, Compare comp);
 
-// Returns indexes of max effective solid football team and its efficiency
-void FindMaxEffectiveSolidFootballTeam(const std::vector<FootballPlayer>& footballPlayers,
-    std::vector<int>* indexes, int* efficiency);
+// Returns max effective solid football team
+std::vector<FootballPlayer> FindMaxEffectiveSolidFootballTeam(
+    const std::vector<FootballPlayer>& footballPlayers);
 
-void PrintMaxEffectiveSolidFootballTeam(const std::vector<int>& indexes, int efficiency);
+void PrintMaxEffectiveSolidFootballTeam(std::vector<FootballPlayer>& maxEffectiveSolidFootballTeam);
 
 int main()
 {
     std::vector<FootballPlayer> footballPlayers = readFootballPlayers();
-    std::vector<int> indexes;
-    int efficiency;
-    FindMaxEffectiveSolidFootballTeam(footballPlayers, &indexes, &efficiency);
-    Mergesort(indexes.begin(), indexes.end(), std::less<int>());
-    PrintMaxEffectiveSolidFootballTeam(indexes, efficiency);
+    std::vector<FootballPlayer> maxEffectiveSolidFootballTeam = 
+    FindMaxEffectiveSolidFootballTeam(footballPlayers);
+    PrintMaxEffectiveSolidFootballTeam(maxEffectiveSolidFootballTeam);
     return 0;
 }
