@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <iterator>
+#include <functional>
 
 class FootballPlayer
 {
@@ -21,12 +22,9 @@ private:
     int index_;
 };
 
-// compares two football players on effectivness, one player less than the second one if the first
-// player's effectivness less than the second player's effectivness
-bool CompareEffectiveness(const FootballPlayer& firstFootballPlayer,
-    const FootballPlayer& secondFootballPlayer)
+bool CompareEffectivenessLess(const FootballPlayer& first, const FootballPlayer& second)
 {
-    return firstFootballPlayer.getEfficiency() < secondFootballPlayer.getEfficiency();
+    return first.getEfficiency() < second.getEfficiency();
 }
 
 std::vector<FootballPlayer> ReadFootballPlayers()
@@ -44,110 +42,102 @@ std::vector<FootballPlayer> ReadFootballPlayers()
 
 template <class RandomAccessIterator, class Compare>
 void Merge(RandomAccessIterator first, RandomAccessIterator medium,
-    RandomAccessIterator last, Compare comp)
+    RandomAccessIterator last, Compare compare)
 {
     std::vector<typename decltype(first)::value_type> copyVector(first, last);
-    RandomAccessIterator leftIterator = copyVector.begin();
-    RandomAccessIterator mediumIterator = copyVector.begin() + (medium - first);
-    RandomAccessIterator rightIterator = mediumIterator + 1;
-    RandomAccessIterator iteration = first;
-    while (leftIterator != mediumIterator + 1 && rightIterator != copyVector.end()) {
-        if (comp(*leftIterator, *rightIterator)) {
-            *iteration = *leftIterator;
-            ++leftIterator;
+    RandomAccessIterator left = copyVector.begin();
+    RandomAccessIterator separator = copyVector.begin() + (medium - first);
+    RandomAccessIterator right = separator;
+    RandomAccessIterator result = first;
+    while (left != separator && right != copyVector.end()) {
+        if (compare(*left, *right)) {
+            *result = *left;
+            ++left;
         } else {
-            *iteration = *rightIterator;
-            ++rightIterator;
+            *result = *right;
+            ++right;
         }
-        ++iteration;
+        ++result;
     }
-    for (; leftIterator != mediumIterator + 1; ++leftIterator) {
-        *iteration = *leftIterator;
-        ++iteration;
-    }
-    for (; rightIterator != copyVector.end(); ++rightIterator) {
-        *iteration = *rightIterator;
-        ++iteration;
-    }
+    std::copy(left, separator, result);
+    std::copy(right, copyVector.end(), result);
 }
 
 template <class RandomAccessIterator, class Compare>
-void MergeSort(RandomAccessIterator first, RandomAccessIterator last, Compare comp)
+void MergeSort(RandomAccessIterator first, RandomAccessIterator last, Compare compare)
 {
-    if (last - first == 1) {
+    if (last - first <= 1) {
         return;
     }
     if (last - first == 2) {
-        if (comp(*(first + 1), *first)) {
+        if (compare(*(first + 1), *first)) {
             std::swap(*first, *(first + 1));
         }
         return;
     }
-    RandomAccessIterator medium = first + (last - first) / 2;
-    MergeSort(first, medium + 1, comp);
-    MergeSort(medium + 1, last, comp);
-    Merge(first, medium, last, comp);
+    RandomAccessIterator medium = first + (last - first) / 2 + 1;
+    MergeSort(first, medium, compare);
+    MergeSort(medium, last, compare);
+    Merge(first, medium, last, compare);
+}
+
+bool isSolidFrootballTeam(const std::vector<FootballPlayer>& sortedFootballPlayers,
+    std::vector<FootballPlayer>::const_iterator leftBorder,
+    std::vector<FootballPlayer>::const_iterator rightBorder)
+{
+    return (rightBorder - leftBorder > 1 && leftBorder->getEfficiency() +
+        (leftBorder + 1)->getEfficiency() >= rightBorder->getEfficiency() || rightBorder -
+        leftBorder <= 1);
 }
 
 std::vector<FootballPlayer> FindMaxEffectiveSolidFootballTeam(
     std::vector<FootballPlayer> footballPlayers)
 {
-    MergeSort(footballPlayers.begin(), footballPlayers.end(), CompareEffectiveness);
-    std::vector<FootballPlayer>::const_iterator leftBorderOfMaxSum = footballPlayers.begin();
-    std::vector<FootballPlayer>::const_iterator rightBorderOfMaxSum = footballPlayers.begin();
-    long long int maxSum = 0;
-    long long int currentSum = 0;
-    bool prevIsLeft = false;
+    MergeSort(footballPlayers.begin(), footballPlayers.end(), CompareEffectivenessLess);
+    struct MaxEffectiveSolidFootballTeam {
+        long long int efficiency_;
+        std::vector<FootballPlayer>::const_iterator start_;
+        std::vector<FootballPlayer>::const_iterator end_;
+    } maxEffectiveSolidFootballTeam;
+    maxEffectiveSolidFootballTeam.start_ = footballPlayers.begin();
+    maxEffectiveSolidFootballTeam.end_ = footballPlayers.begin();
+    maxEffectiveSolidFootballTeam.efficiency_ = 0;
+
+
     std::vector<FootballPlayer>::const_iterator leftBorder = footballPlayers.begin();
     std::vector<FootballPlayer>::const_iterator rightBorder = footballPlayers.begin();
+    long long int currentSumOfEfficiency = rightBorder->getEfficiency();
     for (; rightBorder != footballPlayers.end();) {
-        if (prevIsLeft) {
-            currentSum -= (leftBorder - 1)->getEfficiency();
-        } else {
-            currentSum += rightBorder->getEfficiency();
+        if (currentSumOfEfficiency > maxEffectiveSolidFootballTeam.efficiency_ &&
+            isSolidFrootballTeam(footballPlayers, leftBorder, rightBorder)) {
+            maxEffectiveSolidFootballTeam.efficiency_ = currentSumOfEfficiency;
+            maxEffectiveSolidFootballTeam.start_ = leftBorder;
+            maxEffectiveSolidFootballTeam.end_ = rightBorder;
         }
-        if (rightBorder - leftBorder > 1) {
-            if (leftBorder->getEfficiency() + (leftBorder + 1)->getEfficiency() >=
-                rightBorder->getEfficiency()) {
-                if (currentSum > maxSum) {
-                    maxSum = currentSum;
-                    leftBorderOfMaxSum = leftBorder;
-                    rightBorderOfMaxSum = rightBorder;
-                }
-                ++rightBorder;
-                prevIsLeft = false;
-            } else {
-                ++leftBorder;
-                prevIsLeft = true;
+        if (isSolidFrootballTeam(footballPlayers, leftBorder, rightBorder)) {
+            ++rightBorder;
+            if (rightBorder != footballPlayers.end()) {
+                currentSumOfEfficiency += rightBorder->getEfficiency();
             }
         } else {
-            if (currentSum > maxSum) {
-                maxSum = currentSum;
-                leftBorderOfMaxSum = leftBorder;
-                rightBorderOfMaxSum = rightBorder;
-            }
-            ++rightBorder;
-            prevIsLeft = false;
+            currentSumOfEfficiency -= leftBorder->getEfficiency();
+            ++leftBorder;
         }
     }
-    return std::vector<FootballPlayer>(leftBorderOfMaxSum, rightBorderOfMaxSum + 1);
-}
-
-// compares two football players on index, one player less than the second one if the first
-// player's index less than the second player's index
-bool CompareIndex(const FootballPlayer& firstFootballPlayer,
-    const FootballPlayer& secondFootballPlayer)
-{
-    return firstFootballPlayer.getIndex() < secondFootballPlayer.getIndex();
+    return std::vector<FootballPlayer>(maxEffectiveSolidFootballTeam.start_,
+        maxEffectiveSolidFootballTeam.end_ + 1);
 }
 
 // prints football team in ascending order of the index
-void PrintFootballTeam(std::vector<FootballPlayer> footballTeam)
+void PrintFootballTeam(const std::vector<FootballPlayer>& footballTeam)
 {
-    MergeSort(footballTeam.begin(), footballTeam.end(), CompareIndex);
-    for (std::vector<FootballPlayer>::iterator iterator = footballTeam.begin(); iterator !=
-        footballTeam.end(); ++iterator) {
-        std::cout << iterator->getIndex() + 1 << " ";
+    std::vector<int> indexes(footballTeam.size());
+    for (size_t iteration = 0; iteration < footballTeam.size(); ++iteration) {
+        indexes[iteration] = footballTeam[iteration].getIndex();
+    }
+    MergeSort(indexes.begin(), indexes.end(), std::less<int>());
+    for (int index : indexes) {
+        std::cout << index + 1 << " ";
     }
     std::cout << "\n";
 }
