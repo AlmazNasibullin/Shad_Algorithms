@@ -46,18 +46,18 @@ void Merge(RandomAccessIterator first, RandomAccessIterator medium,
 {
     typedef typename std::iterator_traits<RandomAccessIterator>::value_type type;
     std::vector<type> buffer(last - first);
-    typename std::vector<type>::iterator positionInBuffer = buffer.begin();
+    typename std::vector<type>::iterator bufferIterator = buffer.begin();
     RandomAccessIterator middle = medium;
     RandomAccessIterator begin = first;
     while (first != medium && middle != last) {
         if (compare(*first, *middle)) {
-            *(positionInBuffer++) = *(first++);
+            *(bufferIterator++) = *(first++);
         } else {
-            *(positionInBuffer++) = *(middle++);
+            *(bufferIterator++) = *(middle++);
         }
     }
-    std::copy(first, medium, positionInBuffer);
-    std::copy(middle, last, positionInBuffer);
+    std::copy(first, medium, bufferIterator);
+    std::copy(middle, last, bufferIterator);
     std::copy(buffer.begin(), buffer.end(), begin);
 }
 
@@ -73,12 +73,6 @@ void MergeSort(RandomAccessIterator first, RandomAccessIterator last, Compare co
     Merge(first, medium, last, compare);
 }
 
- struct FootballTeam {
-    long long efficiency;
-    std::vector<FootballPlayer>::const_iterator start;
-    std::vector<FootballPlayer>::const_iterator end;
-};
-
 std::vector<FootballPlayer> FindMaxEffectiveSolidFootballTeam(
     std::vector<FootballPlayer> footballPlayers)
 {
@@ -89,31 +83,23 @@ std::vector<FootballPlayer> FindMaxEffectiveSolidFootballTeam(
         long long efficiency;
         std::vector<FootballPlayer>::const_iterator start;
         std::vector<FootballPlayer>::const_iterator end;
-    } maxEffectiveSolidFootballTeam, currentFootballteam;
+    };
+    FootballTeam currentFootballTeam = {footballPlayers.begin()->getEfficiency(),
+        footballPlayers.begin(), footballPlayers.begin() + 1};
+    FootballTeam maxEffectiveSolidFootballTeam = currentFootballTeam;
 
-
-    currentFootballteam.start = footballPlayers.begin();
-    currentFootballteam.end = footballPlayers.begin() + 1;
-    currentFootballteam.efficiency = currentFootballteam.start->getEfficiency();
-    maxEffectiveSolidFootballTeam.start = currentFootballteam.start;
-    maxEffectiveSolidFootballTeam.end = currentFootballteam.end;
-    maxEffectiveSolidFootballTeam.efficiency = currentFootballteam.efficiency;
-
-
-    while (currentFootballteam.end != footballPlayers.end()) {
-        currentFootballteam.efficiency += currentFootballteam.end->getEfficiency();
-        while (currentFootballteam.end - currentFootballteam.start > 1
-                && currentFootballteam.start->getEfficiency()
-                + (currentFootballteam.start + 1)->getEfficiency()
-                < currentFootballteam.end->getEfficiency()) {
-            currentFootballteam.efficiency -= currentFootballteam.start->getEfficiency();
-            ++currentFootballteam.start;
+    while (currentFootballTeam.end != footballPlayers.end()) {
+        currentFootballTeam.efficiency += currentFootballTeam.end->getEfficiency();
+        while (currentFootballTeam.end - currentFootballTeam.start > 1
+                && currentFootballTeam.start->getEfficiency()
+                + (currentFootballTeam.start + 1)->getEfficiency()
+                < currentFootballTeam.end->getEfficiency()) {
+            currentFootballTeam.efficiency -= currentFootballTeam.start->getEfficiency();
+            ++currentFootballTeam.start;
         }
-        ++currentFootballteam.end;
-        if (currentFootballteam.efficiency > maxEffectiveSolidFootballTeam.efficiency) {
-            maxEffectiveSolidFootballTeam.efficiency = currentFootballteam.efficiency;
-            maxEffectiveSolidFootballTeam.start = currentFootballteam.start;
-            maxEffectiveSolidFootballTeam.end = currentFootballteam.end;
+        ++currentFootballTeam.end;
+        if (currentFootballTeam.efficiency > maxEffectiveSolidFootballTeam.efficiency) {
+            maxEffectiveSolidFootballTeam = currentFootballTeam;
         }
     }
     return {maxEffectiveSolidFootballTeam.start, maxEffectiveSolidFootballTeam.end};
