@@ -365,8 +365,6 @@ public:
 
 private:
     std::vector<T> coefficients_;
-
-
     Polynomial divide(const Polynomial& polynomial, bool rest) const
     {
         int degreeFirst = this->degree();
