@@ -335,12 +335,10 @@ public:
     }
     Polynomial operator/(const Polynomial& polynomial) const
     {
-        assert(polynomial.degree() != -1);
         return divide(polynomial, false);
     }
     Polynomial operator%(const Polynomial& polynomial) const
     {
-        assert(polynomial.degree() != -1);
         return divide(polynomial, true);
     }
     Polynomial operator,(const Polynomial& polynomial) const
@@ -364,7 +362,6 @@ public:
     }
 
 private:
-    std::vector<T> coefficients_;
     Polynomial divide(const Polynomial& polynomial, bool rest) const
     {
         int degreeFirst = this->degree();
@@ -394,4 +391,7 @@ private:
         }
         coefficients_.resize(toResize + 1);
     }
+
+private:
+    std::vector<T> coefficients_;
 };
