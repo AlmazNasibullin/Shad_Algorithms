@@ -335,10 +335,12 @@ public:
     }
     Polynomial operator/(const Polynomial& polynomial) const
     {
+        assert(polynomial.degree() != -1);
         return divide(polynomial, false);
     }
     Polynomial operator%(const Polynomial& polynomial) const
     {
+        assert(polynomial.degree() != -1);
         return divide(polynomial, true);
     }
     Polynomial operator,(const Polynomial& polynomial) const
@@ -369,9 +371,6 @@ private:
     {
         int degreeFirst = this->degree();
         int degreeSecond = polynomial.degree();
-        if (degreeSecond == -1) {
-            return Polynomial(T());
-        }
         if (degreeSecond > degreeFirst) {
             return rest ? *this : Polynomial(T());
         }

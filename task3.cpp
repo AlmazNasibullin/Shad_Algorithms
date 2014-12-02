@@ -4,6 +4,13 @@
 #include <limits>
 #include <utility>
 
+class HashTavle
+{
+public:
+private:
+    long long primeNumber_;
+};
+
 class PerfectHashingTable
 {
 public:
@@ -39,7 +46,7 @@ void parsingRequests(const std::vector<long long>& requests, const FixedSet& fix
 
 int main()
 {
-    long long int primeNumber = 17179869209;
+    long long int primeNumber = 2147483053;
     std::vector<long long> numbers = readInputNumbers();
     std::vector<long long> requests = readInputRequests();
     FixedSet fixedSet(primeNumber);
