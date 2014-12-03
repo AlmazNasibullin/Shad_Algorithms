@@ -335,10 +335,12 @@ public:
     }
     Polynomial operator/(const Polynomial& polynomial) const
     {
+        assert(polynomial.degree() != -1);
         return divide(polynomial, false);
     }
     Polynomial operator%(const Polynomial& polynomial) const
     {
+        assert(polynomial.degree() != -1);
         return divide(polynomial, true);
     }
     Polynomial operator,(const Polynomial& polynomial) const
