@@ -3,54 +3,60 @@
 #include <random>
 #include <limits>
 #include <utility>
+#include <algorithm>
 
-class HashTavle
+class HashFunction
 {
 public:
+    HashFunction();
+    HashFunction(long long firstCoeficient, long long secondCoeficient, long long secondModule);
+    long long operator()(long long number) const;
+
+public:
+    static long long firstModule_; // prime number more than secondModule
+
 private:
-    long long primeNumber_;
+    long long firstCoeficient_;
+    long long secondCoeficient_;
+    long long secondModule_;
 };
 
-class PerfectHashingTable
+long long HashFunction::firstModule_ = 2147483053;
+
+class InternalFixedSet
 {
 public:
-    explicit PerfectHashingTable(long long primeNumber);
-    void build(const std::vector<long long>& data);
-    bool contains(long long element);
+    void initialize(const std::vector<long long>& data, const std::vector<size_t>& indexes);
+    bool contains(long long element) const;
+
 private:
-    long long primeNumber_;
-    long long firstCoeficient;
-    long long secondCoeficient;
-    std::vector<std::vector<long long> > hashingTable;
-    std::vector<std::pair<long long, long long> > coeficients;
-
-
-    void buildFirstHash(const std::vector<long long>& data);
-    void buildSecondHash();
+    std::vector<long long> elements;
+    HashFunction hashFunction;
 };
 
-class FixedSet {
+class ExternalFixedSet
+{
 public:
-    explicit FixedSet(long long primeNumber);
-    void initialize(const std::vector<long long>& numbers);
-    bool contains(long long number);
+    ExternalFixedSet() {}
+    void initialize(const std::vector<long long>& data);
+    bool contains(long long element) const;
+
 private:
-    PerfectHashingTable perfectHashingTable;
+    HashFunction hashFunction;
+    std::vector<InternalFixedSet> internalFixedSets;
 };
 
-std::vector<long long> readInputNumbers();
+std::vector<long long> readNumbers();
 
-std::vector<long long> readInputRequests();
-
-void parsingRequests(const std::vector<long long>& requests, const FixedSet& fixedSet);
+void processRequests(const std::vector<long long>& requests,
+        const ExternalFixedSet& externalFixedSet);
 
 int main()
 {
-    long long int primeNumber = 2147483053;
-    std::vector<long long> numbers = readInputNumbers();
-    std::vector<long long> requests = readInputRequests();
-    FixedSet fixedSet(primeNumber);
-    fixedSet.initialize(numbers);
-    parsingRequests(requests, fixedSet);
+    std::vector<long long> numbers = readNumbers();
+    std::vector<long long> requests = readNumbers();
+    ExternalFixedSet externalFixedSet;
+    externalFixedSet.initialize(numbers);
+    processRequests(requests, externalFixedSet);
     return 0;
 }
