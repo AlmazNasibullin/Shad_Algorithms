@@ -4,59 +4,64 @@
 #include <limits>
 #include <utility>
 #include <algorithm>
+#include <string>
+
+const long long primeNumber = 2147483053;
 
 class HashFunction
 {
 public:
     HashFunction();
-    HashFunction(long long firstCoeficient, long long secondCoeficient, long long secondModule);
-    long long operator()(long long number) const;
-
-public:
-    static long long firstModule_; // prime number more than secondModule
+    HashFunction(long long nonzeroReminderOfPrimeModule, long long reminderOfPrimeModule,
+            long long reModule, long long primeModule = primeNumber);
+    long long operator()(int number) const;
 
 private:
-    long long firstCoeficient_;
-    long long secondCoeficient_;
-    long long secondModule_;
+    long long nonzeroReminderOfPrimeModule_;
+    long long reminderOfPrimeModule_;
+    long long primeModule_;
+    long long reModule_;
 };
 
-long long HashFunction::firstModule_ = 2147483053;
-
-class InternalFixedSet
+class NoCollisionsQuadraticMemoryHashTable
 {
 public:
-    void initialize(const std::vector<long long>& data, const std::vector<size_t>& indexes);
+    explicit NoCollisionsQuadraticMemoryHashTable(const std::vector<size_t>& indexes);
+    void initialize(const std::vector<int>& data);
     bool contains(long long element) const;
 
 private:
-    std::vector<long long> elements;
-    HashFunction hashFunction;
+    std::vector<long long> elements_;
+    std::vector<size_t> indexes_;
+    HashFunction hashFunction_;
 };
 
-class ExternalFixedSet
+class FixedSet
 {
 public:
-    ExternalFixedSet() {}
-    void initialize(const std::vector<long long>& data);
-    bool contains(long long element) const;
+    FixedSet();
+    void initialize(const std::vector<int>& data);
+    bool contains(int element) const;
 
 private:
-    HashFunction hashFunction;
-    std::vector<InternalFixedSet> internalFixedSets;
+    HashFunction hashFunction_;
+    std::vector<NoCollisionsQuadraticMemoryHashTable> noCollisionsQuadraticMemoryHashTables_;
 };
 
-std::vector<long long> readNumbers();
+std::vector<int> readNumbers();
 
-void processRequests(const std::vector<long long>& requests,
-        const ExternalFixedSet& externalFixedSet);
+std::vector<std::string> processRequests(const std::vector<int>& requests, const FixedSet& fixedSet);
+
+template <typename T>
+void print(const std::vector<T>& array);
 
 int main()
 {
-    std::vector<long long> numbers = readNumbers();
-    std::vector<long long> requests = readNumbers();
-    ExternalFixedSet externalFixedSet;
-    externalFixedSet.initialize(numbers);
-    processRequests(requests, externalFixedSet);
+    std::vector<int> numbers = readNumbers();
+    std::vector<int> requests = readNumbers();
+    FixedSet fixedSet;
+    fixedSet.initialize(numbers);
+    std::vector<std::string> result = processRequests(requests, fixedSet);
+    print(result);
     return 0;
 }
