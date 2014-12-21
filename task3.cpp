@@ -22,12 +22,11 @@ public:
     }
     long long operator()(int number) const
     {
-        long long result = ((linearCoefficient_ * static_cast<long long>(number) + constant_)
-            % primeModule_) % module_;
+        long long result = static_cast<long long>(number) % primeModule_;
         if (result < 0) {
-            result += module_;
+            result += primeModule_;
         }
-        return result;
+        return ((linearCoefficient_ *  result + constant_) % primeModule_) % module_;
     }
 
 private:
@@ -41,27 +40,27 @@ class NoCollisionsQuadraticMemoryHashTable
 {
 public:
     NoCollisionsQuadraticMemoryHashTable() {}
-    void initialize(const std::vector<int>& data, const std::vector<size_t>& indexes)
+    void initialize(const std::vector<int>& data)
     {
-        if (indexes.empty()) {
+        if (data.empty()) {
             return;
         }
         std::random_device randomDevice;
         std::mt19937 generator(randomDevice());
         std::uniform_int_distribution<long long> firstDistribution(1, primeNumber);
         std::uniform_int_distribution<long long> secondDistribution(0, primeNumber);
-        long long size = static_cast<long long>(indexes.size() * indexes.size());
+        long long size = static_cast<long long>(data.size() * data.size());
         elements_.resize(size);
         bool stop = false;
         while (!stop) {
             hashFunction_ = HashFunction(firstDistribution(generator),
                 secondDistribution(generator), size);
-            std::fill(elements_.begin(), elements_.end(), std::numeric_limits<long long>::max());
+            std::fill(elements_.begin(), elements_.end(), std::numeric_limits<int>::max());
             bool again = false;
-            for (size_t i = 0; i < indexes.size(); ++i) {
-                long long index = hashFunction_(data[indexes[i]]);
-                if (elements_[index] == std::numeric_limits<long long>::max()) {
-                    elements_[index] = data[indexes[i]];
+            for (size_t i = 0; i < data.size(); ++i) {
+                long long index = hashFunction_(data[i]);
+                if (elements_[index] == std::numeric_limits<int>::max()) {
+                    elements_[index] = data[i];
                 } else {
                     again = true;
                     break;
@@ -77,11 +76,11 @@ public:
         if (elements_.empty()) {
             return false;
         }
-        return elements_[hashFunction_(element)] == element ? true : false;
+        return elements_[hashFunction_(element)] == element;
     }
 
 private:
-    std::vector<long long> elements_;
+    std::vector<int> elements_;
     HashFunction hashFunction_;
 };
 
@@ -91,7 +90,7 @@ public:
     FixedSet() {}
     void initialize(const std::vector<int>& data)
     {
-        std::vector<std::vector<size_t>> indexes(data.size());
+        std::vector<std::vector<int>> numbers(data.size());
         std::random_device randomDevice;
         std::mt19937 generator(randomDevice());
         std::uniform_int_distribution<long long> firstDistribution(1, primeNumber - 1);
@@ -101,28 +100,32 @@ public:
         while (!stop) {
             hashFunction_ = HashFunction(firstDistribution(generator),
                 secondDistribution(generator), size);
-            for (std::vector<size_t>& index : indexes) {
-                index.resize(0);
+            for (size_t i = 0; i < numbers.size(); ++i) {
+                numbers[i].resize(0);
             }
             for (size_t i = 0; i < data.size(); ++i) {
                 long long index = hashFunction_(data[i]);
-                indexes[index].push_back(i);
+                numbers[index].push_back(data[i]);
             }
-            size_t sumOfSquaresOfLength = 0;
-            for (std::vector<size_t>& index : indexes) {
-                sumOfSquaresOfLength += index.size() * index.size();
+            long long sumOfSquaresOfLength = 0;
+            for (size_t i = 0; i < numbers.size(); ++i) {
+                sumOfSquaresOfLength += static_cast<long long>(numbers[i].size())
+                    * static_cast<long long>(numbers[i].size());
             }
-            if (sumOfSquaresOfLength < 3 * indexes.size()) {
+            if (sumOfSquaresOfLength < 3 * static_cast<long long>(numbers.size())) {
                 stop = true;
             }
         }
-        for (size_t i = 0; i < data.size(); ++i) {
+        for (size_t i = 0; i < numbers.size(); ++i) {
             hashTables_.push_back(NoCollisionsQuadraticMemoryHashTable());
-            hashTables_[i].initialize(data, indexes[i]);
+            hashTables_[i].initialize(numbers[i]);
         }
     }
     bool contains(int element) const
     {
+        if (hashTables_.empty()) {
+            return false;
+        }
         long long index = hashFunction_(element);
         return hashTables_[index].contains(element);
     }
@@ -152,7 +155,7 @@ std::vector<bool> processRequests(const std::vector<int>& requests, const FixedS
     return result;
 }
 
-void printFormattedResult(const std::vector<bool>& result)
+void printResponses(const std::vector<bool>& result)
 {
     for (bool answer : result) {
         if (answer) {
@@ -170,6 +173,6 @@ int main()
     FixedSet fixedSet;
     fixedSet.initialize(numbers);
     std::vector<bool> result = processRequests(requests, fixedSet);
-    printFormattedResult(result);
+    printResponses(result);
     return 0;
 }
