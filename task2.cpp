@@ -63,18 +63,18 @@ public:
     {
         int index = getHeapSize();
         elements_.push_back(key);
-        while (index > 0 && comparator_(elements_[(index - 1) / 2], elements_[index])) {
-            swap(index, (index - 1) / 2);
-            index = (index - 1) / 2;
+        while (index > 0 && comparator_(elements_[getParentIndex(index)], elements_[index])) {
+            swap(index, getParentIndex(index));
+            index = getParentIndex(index);
         }
     }
     void erase(int index)
     {
         swap(index, getHeapSize() - 1);
         elements_.resize(getHeapSize() - 1);
-        while (index > 0 && comparator_(elements_[(index - 1) / 2], elements_[index])) {
-            swap(index, (index - 1) / 2);
-            index = (index - 1) / 2;
+        while (index > 0 && comparator_(elements_[getParentIndex(index)], elements_[index])) {
+            swap(index, getParentIndex(index));
+            index = getParentIndex(index);
         }
         heapify(index);
     }
@@ -108,19 +108,39 @@ private:
     }
     void heapify(int index)
     {
-        int leftChild = 2 * index + 1;
-        int rightChild = 2 * index + 2;
+        int leftChild = getLeftChildIndex(index);
+        int rightChild = getRightChildIndex(index);
         int largest = index;
-        if (leftChild < getHeapSize() && comparator_(elements_[index], elements_[leftChild])) {
+        if (isThereLeftChild(index) && comparator_(elements_[index], elements_[leftChild])) {
             largest = leftChild;
         }
-        if (rightChild < getHeapSize() && comparator_(elements_[largest], elements_[rightChild])) {
+        if (isThereRightChild(index) && comparator_(elements_[largest], elements_[rightChild])) {
             largest = rightChild;
         }
         if (largest != index) {
             swap(index, largest);
             heapify(largest);
         }
+    }
+    int getParentIndex(int index) const
+    {
+        return (index - 1) / 2;
+    }
+    int getLeftChildIndex(int index) const
+    {
+        return 2 * index + 1;
+    }
+    int getRightChildIndex(int index) const
+    {
+        return 2 * index + 2;
+    }
+    bool isThereLeftChild(int index) const
+    {
+        return 2 * index + 1 < getHeapSize();
+    }
+    bool isThereRightChild(int index) const
+    {
+        return 2 * index + 2 < getHeapSize();
     }
 
 private:
@@ -148,13 +168,10 @@ public:
     bool operator()(const std::list<MemorySegment>::iterator& first,
         const std::list<MemorySegment>::iterator& second)
     {
-        if (first->getLength() < second->getLength()) {
-            return true;
+        if (first->getLength() == second->getLength()) {
+            return first->getStart() > second->getStart() 
         }
-        if (first->getLength() > second->getLength()) {
-            return false;
-        }
-        return first->getStart() > second->getStart();
+        return first->getLength() < second->getLength();
     }
 };
 
@@ -166,17 +183,17 @@ public:
         allSegments.push_back(MemorySegment(0, memorySize, 0, true));
         freeSegments.insert(allSegments.begin());
     }
-    std::pair<int, std::list<MemorySegment>::iterator> allocateMemory(int query)
+    std::pair<int, std::list<MemorySegment>::iterator> allocateMemory(int lengthToAllocate)
     {
-        if (!freeSegments.empty() &&  freeSegments.getMax()->getLength() >= query) {
+        if (!freeSegments.empty() &&  freeSegments.getMax()->getLength() >= lengthToAllocate) {
             std::list<MemorySegment>::iterator max = freeSegments.extractMax();
             int answer = max->getStart() + 1;
             std::list<MemorySegment>::iterator allocated = allSegments.insert(max,
-                MemorySegment(max->getStart(), query, -1, false));
-            if (max->getLength() - query > 0) {
+                MemorySegment(max->getStart(), lengthToAllocate, -1, false));
+            if (max->getLength() - lengthToAllocate > 0) {
                 std::list<MemorySegment>::iterator newInserted = allSegments.insert(max,
-                    MemorySegment(max->getStart() + query, max->getLength() - query,
-                    freeSegments.getHeapSize(), true));
+                    MemorySegment(max->getStart() + lengthToAllocate, max->getLength()
+                        - lengthToAllocate, freeSegments.getHeapSize(), true));
                 freeSegments.insert(newInserted);
             }
             allSegments.erase(max);
@@ -188,6 +205,29 @@ public:
     {
         std::list<MemorySegment>::iterator next = std::next(allocated, 1);
         std::list<MemorySegment>::iterator previous = std::prev(allocated, 1);
+        std::list<MemorySegment>::iterator forInserting = allSegments.end();
+
+
+        if (isAllocatedSegmentFirst(allocated)) {
+            if (!isAllocatedSegmentLast(allocated) && !next->isFree()) {
+                MemorySegment newFreeMemorySegment(allocated->getStart(), allocated->getLength()
+                    + next->getLength(), freeSegments.getHeapSize() - 1, true);
+                freeSegments.erase(next->getIndexInHeap());
+                allSegments.erase(next);
+                allocated = allSegments.erase(allocated);
+                forInserting = allSegments.insert(allocated, newFreeMemorySegment);
+            } else {
+                allocated->makeFree();
+                allocated->setIndexInHeap(freeSegments.getHeapSize());
+                forInserting = allocated;
+            }
+        } else {
+            
+        }
+
+
+
+
         if ((next != allSegments.end() && !next->isFree() || next == allSegments.end()) &&
                 (allocated != allSegments.begin() && !previous->isFree() ||
                 allocated == allSegments.begin())) {
@@ -227,12 +267,23 @@ public:
             std::list<MemorySegment>::iterator newInserted = allSegments.insert(allocated,
                 newFreeMemorySegment);
             freeSegments.insert(newInserted);
-        } else if (next == allSegments.end() && allocated == allSegments.begin()) {
-            allocated->makeFree();
-            allocated->setIndexInHeap(0);
-            freeSegments.insert(allocated);
         }
     }
+
+private:
+    void insertToFreeSegments(std::list<MemorySegment>::iterator forInserting)
+    {
+        freeSegments.insert(forInserting);
+    }
+    bool isAllocatedSegmentLast(std::list<MemorySegment>::iterator allocated) const
+    {
+        return std::next(allocated, 1) == allSegments.end();
+    }
+    bool isAllocatedSegmentFirst(std::list<MemorySegment>::iterator allocated) const
+    {
+        return allocated == allSegments.begin();
+    }
+
 private:
     std::list<MemorySegment> allSegments;
     Heap<std::list<MemorySegment>::iterator, PositionModifierForSegments,
