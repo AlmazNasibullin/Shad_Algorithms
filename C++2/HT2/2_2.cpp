@@ -119,6 +119,16 @@ namespace matrix {
             return matrix_[row][column];
         }
 
+        TMatrix transpose() const {
+            TMatrix transposed(*this);
+            for (int i = 0; i < size_; ++i) {
+                for (int j = i + 1; j < size_; ++j) {
+                    std::swap(transposed(i, j), transposed(j, i));
+                }
+            }
+            return transposed;
+        }
+
         bool operator== (const TMatrix<Type> &other) {
             if (size_ != other.size_) {
                 return false;
@@ -173,12 +183,11 @@ namespace matrix {
     };
 
     template <typename Type>
-    void multiplyVectors(const TMatrix<Type> &firstMatrix,
+    void multiplyRowToColumn(const TMatrix<Type> &firstMatrix,
                         const TMatrix<Type> &secondMatrix,
                         TMatrix<Type> &resultMatrix,
                         int row,
-                        int column,
-                        const CellNumber &leftUp) {
+                        int column) {
         resultMatrix(row, column) = Type();
         int size = resultMatrix.size();
         for (int index = 0; index < size; ++index) {
@@ -188,16 +197,37 @@ namespace matrix {
     }
 
     template <typename Type>
+    void multiplyRowToRow(const TMatrix<Type> &firstMatrix,
+                        const TMatrix<Type> &secondMatrix,
+                        TMatrix<Type> &resultMatrix,
+                        int firstMatrixRow,
+                        int secondMatrixRow) {
+        resultMatrix(firstMatrixRow, secondMatrixRow) = Type();
+        int size = resultMatrix.size();
+        for (int index = 0; index < size; ++index) {
+            resultMatrix(firstMatrixRow, secondMatrixRow)
+                += firstMatrix(firstMatrixRow, index)
+                * secondMatrix(secondMatrixRow, index);
+        }
+    }
+
+    template <typename Type>
     void multiplyMatrix(const TMatrix<Type> &firstMatrix,
                         const TMatrix<Type> &secondMatrix,
                         TMatrix<Type> &resultMatrix,
                         const CellNumber &leftUp,
-                        const CellNumber &rightDown) {
+                        const CellNumber &rightDown,
+                        bool transpose) {
         for (int row = leftUp.row; row <= rightDown.row; ++row) {
             for (int column = leftUp.column; column <= rightDown.column;
                     ++column) {
-                multiplyVectors(firstMatrix, secondMatrix, resultMatrix,
-                    row, column, leftUp);
+                if (transpose) {
+                    multiplyRowToRow(firstMatrix, secondMatrix, resultMatrix,
+                        row, column);
+                } else {
+                    multiplyRowToColumn(firstMatrix, secondMatrix, resultMatrix,
+                        row, column);
+                }
             }
         }
     }
@@ -217,61 +247,79 @@ struct TTask {
         final_(final) {}
 };
 
+void performMatrixMultiplicationInMultipleThreads(int size,
+                                                bool transpose,
+                                                int maxThreadCount) {
+    matrix::TMatrix<int> first(size);
+    matrix::TMatrix<int> second(size);
+    matrix::TMatrix<int> resultForOneThread(size);
+    matrix::TMatrix<int> result(size);
+    matrix::fillIntegerMatrixRandomly(first, 0, 5);
+    matrix::fillIntegerMatrixRandomly(second, 0, 5);
+    if (transpose) {
+        second = second.transpose();
+    }
+    
+    for (int threadsCount = 1; threadsCount < maxThreadCount; ++threadsCount) {
+        // В случае перемножения нескольких пар матриц можно было бы
+        // использовать очередь задач.
+        std::vector<int> forEach;
+        forEach.resize(threadsCount, size / threadsCount);
+        int rest = size - threadsCount * (size / threadsCount);
+        for (int i = 0; i < rest; ++i) {
+            ++forEach[i];
+        }
+
+        std::vector<std::thread> threads;
+        high_resolution_clock::time_point firstTP = high_resolution_clock::now();
+        int curStart = 0;
+        for (int i = 0; i < threadsCount; ++i) {
+            if (threadsCount == 1) {
+                threads.push_back(std::thread(matrix::multiplyMatrix<int>,
+                    std::ref(first), std::ref(second),
+                    std::ref(resultForOneThread), matrix::CellNumber(curStart, 0),
+                    matrix::CellNumber(curStart + forEach[i] - 1, size - 1),
+                    transpose));
+            } else {
+                threads.push_back(std::thread(matrix::multiplyMatrix<int>,
+                    std::ref(first), std::ref(second), std::ref(result),
+                    matrix::CellNumber(curStart, 0),
+                    matrix::CellNumber(curStart + forEach[i] - 1, size - 1),
+                    transpose));
+            }
+            curStart += forEach[i];
+        }
+        for (int i = 0; i < threadsCount; ++i) {
+            threads[i].join();
+        }
+        high_resolution_clock::time_point secondTP
+            = high_resolution_clock::now();
+        duration<double> timeSpan
+            = duration_cast<duration<double>>(secondTP - firstTP);
+        std::cout << std::setprecision(2) << timeSpan.count() << "\t"
+            << std::flush;
+
+        if (threadsCount != 1 && result != resultForOneThread) {
+            std::cout << "\nIncorrect answer " << threadsCount << "threads\n";
+            return;
+        }
+    }
+}
+
 void runComparison() {
     const int maxThreadCount = 10;
     const std::vector<int> sizes = {128, 256, 512, 1024};
-    std::cout << "Размер матрицы x Кол-во потоков\n";
+    
+    // без транспонирования второй матрицы
+    std::cout << "Без транспонирования второй матрицы\n";
     for (int size : sizes) {
-        matrix::TMatrix<int> first(size);
-        matrix::TMatrix<int> second(size);
-        matrix::TMatrix<int> resultForOneThread(size);
-        matrix::TMatrix<int> result(size);
-        matrix::fillIntegerMatrixRandomly(first, 0, 5);
-        matrix::fillIntegerMatrixRandomly(second, 0, 5);
-        
-        for (int threadsCount = 1; threadsCount < maxThreadCount;
-                ++threadsCount) {
-            // В случае перемножения нескольких пар матриц можно было бы
-            // использовать блокирующую очередь, складывая в нее таски.
-            std::vector<int> forEach;
-            forEach.resize(threadsCount, size / threadsCount);
-            int rest = size - threadsCount * (size / threadsCount);
-            for (int i = 0; i < rest; ++i) {
-                ++forEach[i];
-            }
-
-            std::vector<std::thread> threads;
-            high_resolution_clock::time_point firstTP = high_resolution_clock::now();
-            int curStart = 0;
-            for (int i = 0; i < threadsCount; ++i) {
-                if (threadsCount == 1) {
-                    threads.push_back(std::thread(matrix::multiplyMatrix<int>,
-                        std::ref(first), std::ref(second),
-                        std::ref(resultForOneThread), matrix::CellNumber(curStart, 0),
-                        matrix::CellNumber(curStart + forEach[i] - 1, size - 1)));
-                } else {
-                    threads.push_back(std::thread(matrix::multiplyMatrix<int>,
-                        std::ref(first), std::ref(second), std::ref(result),
-                        matrix::CellNumber(curStart, 0),
-                        matrix::CellNumber(curStart + forEach[i] - 1, size - 1)));
-                }
-                curStart += forEach[i];
-            }
-            for (int i = 0; i < threadsCount; ++i) {
-                threads[i].join();
-            }
-            high_resolution_clock::time_point secondTP
-                = high_resolution_clock::now();
-            duration<double> timeSpan
-                = duration_cast<duration<double>>(secondTP - firstTP);
-            std::cout << std::setprecision(2) << timeSpan.count() << "\t"
-                << std::flush;
-
-            if (threadsCount != 1 && result != resultForOneThread) {
-                std::cout << "\nIncorrect answer " << threadsCount << "threads\n";
-                return;
-            }
-        }
+        performMatrixMultiplicationInMultipleThreads(size, false, maxThreadCount);
+        std::cout << std::endl;
+    }
+    // с транспонированием второй матрицы
+    std::cout << "С транспонированием второй матрицы\n";
+    for (int size : sizes) {
+        performMatrixMultiplicationInMultipleThreads(size, true, maxThreadCount);
         std::cout << std::endl;
     }
 }
