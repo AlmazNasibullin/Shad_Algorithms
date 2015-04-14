@@ -5,7 +5,7 @@
 #include <cstring>
 #include <unistd.h>
 
-void runClient(int port, char* hostname) {
+void runClient(int port, const std::string& hostname) {
     int sock;
     struct sockaddr_in addr;
 
@@ -24,7 +24,9 @@ void runClient(int port, char* hostname) {
         exit(1);
     }
     
-    send(sock, hostname, std::strlen(hostname), 0);
+    std::string msg = "GET / HTTP/1.1\r\nHost: " + hostname + 
+        " \r\nConnection: close\r\n\r\n";
+    send(sock, &msg[0], msg.length(), 0);
 
     std::stringstream data;
     char buf[1024];
@@ -48,7 +50,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     const int port = std::stoi(argv[1]);
-    runClient(port, argv[2]);
+    runClient(port, std::string(argv[2]));
 
     return 0;
 }

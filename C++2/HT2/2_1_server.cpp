@@ -8,15 +8,43 @@
 #include <unistd.h>
 #include <mutex>
 #include <thread>
+#include <algorithm>
 
-std::string makeGetRequets(char *hostname) {
+std::string getHostname(std::string &msg) {
+    std::string pattern = "Host: ";
+    std::string::size_type startPosition = msg.find(pattern);
+    if (startPosition == std::string::npos) {
+        throw std::runtime_error("Hostname wasn't found");
+    }
+    startPosition += pattern.size();
+    std::string::size_type endPosition =
+        std::min(msg.find(" ", startPosition), 
+            std::min(msg.find("\r", startPosition),
+            msg.find("\n", startPosition)));
+    return msg.substr(startPosition, endPosition - startPosition);
+}
+
+std::string makeGetRequets(std::string &msg,
+                            std::stringstream &log,
+                            std::mutex &m,
+                            char* IP) {
+    if (msg.substr(0, 3).compare("GET") != 0) {
+        throw std::runtime_error("No get request");
+    }
+    std::string hostname = getHostname(msg);
+
+    {
+        std::lock_guard<std::mutex> lock(m);
+        log << IP << " " << hostname << "\n";
+    }
+
     int sckt = socket(AF_INET, SOCK_STREAM, 0);
     if (sckt < 0) {
         throw std::runtime_error("Getter: socket error");
     }
 
     struct sockaddr_in addr = {AF_INET, htons(80)};
-    struct hostent* h = gethostbyname(hostname);
+    struct hostent* h = gethostbyname(&hostname[0]);
     if (!h) {
         close(sckt);
         throw std::runtime_error("Getter: gethostbyname error");
@@ -33,8 +61,6 @@ std::string makeGetRequets(char *hostname) {
         throw std::runtime_error("Getter: connect error");
     }
     
-    std::string msg = "GET / HTTP/1.1\r\nHost: " + std::string(hostname)
-        + "\r\nConnection: close\r\n\r\n";
     send(sckt, &msg[0], msg.size(),0);
 
     char buf[1024];
@@ -50,22 +76,20 @@ std::string makeGetRequets(char *hostname) {
 }
 
 void runGetter(int sock, std::stringstream &log, std::mutex &m, char* IP) {
-    char buf[256];
-    int count = recv(sock, buf, 256, 0);
-    std::string hostname(buf, count);
-
+    char buf[1024];
+    int reads = recv(sock, buf, 1024, 0);
+    std::string msg(buf, reads);
+    
     try {
-        std::string answer = makeGetRequets(&hostname[0]);
-        {
-            std::lock_guard<std::mutex> lock(m);
-            log << IP << " " << hostname << "\n";
-        }
+        std::string answer = makeGetRequets(msg, log, m, IP);
         send(sock, &answer[0], answer.size(), 0);
     } catch (std::runtime_error re) {
         if (std::strcmp(re.what(),
                 "Getter: gethostbyname error") == 0) {
             std::string answer = "Invalid hostname";
             send(sock, &answer[0], answer.size(), 0);
+        } else if (std::strcmp(re.what(), "No get request") == 0) {
+            // not get request
         } else {
             std::string answer = re.what();
             send(sock, &answer[0], answer.size(), 0);
@@ -132,6 +156,7 @@ void runListener(int port) {
             std::cout << "Server: accepting error" << std::endl;
             continue;
         }
+        
         std::thread getter(runGetter, sock, std::ref(log), std::ref(m),
             inet_ntoa(clientAddr.sin_addr));
         getter.detach();
