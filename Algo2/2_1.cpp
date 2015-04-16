@@ -372,7 +372,6 @@ public:
 
     void Init(const std::string& pattern, char wildcard) {
         pattern_length_ = pattern.size();
-        words_occurrences_by_position_.assign(pattern_length_, 0);
         auto patternsWithoutWildcard = Split(pattern,
             [&wildcard](char character) {
                 return character == wildcard;
@@ -394,32 +393,31 @@ public:
     // Resets matcher to start scanning new stream
     void Reset() {
         words_occurrences_by_position_.clear();
-        words_occurrences_by_position_.clear();
+        number_of_words_ = 0;
     }
 
     // Scans new character and calls on_match() if
     // suffix of scanned characters matches pattern
     template<class Callback>
-    void Scan(char character, size_t offset, Callback on_match) {
+    void Scan(char character, Callback on_match) {
         state_ = state_.Next(character);
+        words_occurrences_by_position_.push_front(0);
         aho_corasick_automaton_.get()->GenerateMatches(state_,
-            [this, offset] (size_t id) mutable {
-                if (offset >= id) {
-                    ++words_occurrences_by_position_[(offset - id)
-                        % pattern_length_];
+            [this] (size_t id) mutable {
+                if (id < words_occurrences_by_position_.size()) {
+                    ++words_occurrences_by_position_[id];
                 }
             });
-        if (offset + 1 >= pattern_length_) {
-            if (words_occurrences_by_position_[(offset + 1) % pattern_length_]
-                     == number_of_words_) {
+        if (words_occurrences_by_position_.size() == pattern_length_) {
+            if (words_occurrences_by_position_.back() == number_of_words_) {
                 on_match();
             }
-            words_occurrences_by_position_[(offset + 1) % pattern_length_] = 0;
+            words_occurrences_by_position_.pop_back();
         }
     }
 
 private:
-    std::vector<size_t> words_occurrences_by_position_;
+    std::deque<size_t> words_occurrences_by_position_;
     aho_corasick::NodeReference state_;
     size_t number_of_words_;
     size_t pattern_length_;
@@ -440,8 +438,7 @@ std::vector<size_t> FindFuzzyMatches(const std::string& patternWithWildcards,
     matcher.Init(patternWithWildcards, wildcard);
     std::vector<size_t> occurrences;
     for (size_t offset = 0; offset < text.size(); ++offset) {
-        matcher.Scan(text[offset], offset,
-            [&occurrences, offset, patternLength] () {
+        matcher.Scan(text[offset], [&occurrences, offset, patternLength] () {
                 occurrences.push_back(offset + 1 - patternLength);
             });
     }
