@@ -41,25 +41,24 @@ namespace traverses {
     template<class Visitor, class Graph, class Vertex>
     void BreadthFirstSearch(Vertex origin_vertex, Visitor visitor,
             const Graph& graph) {
-        std::queue<Vertex> queue;
-        std::unordered_set<Vertex> visited;
+        std::queue<Vertex> seen_unprocessed_vertexes;
+        std::unordered_set<Vertex> visited_vertexes;
         
         visitor.DiscoverVertex(origin_vertex);
-        queue.push(origin_vertex);
-        visited.insert(origin_vertex);
+        seen_unprocessed_vertexes.push(origin_vertex);
+        visited_vertexes.insert(origin_vertex);
         
-        while (!queue.empty()) {
-            Vertex vertex = queue.front();
-            queue.pop();
+        while (!seen_unprocessed_vertexes.empty()) {
+            Vertex vertex = seen_unprocessed_vertexes.front();
+            seen_unprocessed_vertexes.pop();
             visitor.ExamineVertex(vertex);
-            for (const typename Graph::Edge &edge
-                    : graph.OutgoingEdges(vertex)) {
+            for (const auto &edge : graph.OutgoingEdges(vertex)) {
                 visitor.ExamineEdge(edge);
                 Vertex target = graph.GetTarget(edge);
-                if (visited.count(target) == 0) {
+                if (visited_vertexes.count(target) == 0) {
                     visitor.DiscoverVertex(target);
-                    queue.push(graph.GetTarget(edge));
-                    visited.insert(target);
+                    seen_unprocessed_vertexes.push(graph.GetTarget(edge));
+                    visited_vertexes.insert(target);
                 }
             }
         }
@@ -91,35 +90,32 @@ namespace aho_corasick {
         std::map<char, AutomatonNode*> automaton_transitions;
         AutomatonNode* suffix_link;
         AutomatonNode* terminal_link;
-        char character;
     };
 
     // Returns nullptr if there is no such transition
     AutomatonNode* GetTrieTransition(AutomatonNode* node, char character) {
-        auto trie_shift_by_character_to_child
-            = node->trie_transitions.find(character);
-        if (trie_shift_by_character_to_child
-                == node->trie_transitions.end()) {
+        auto character_and_node = node->trie_transitions.find(character);
+        if (character_and_node == node->trie_transitions.end()) {
             return nullptr;
         }
-        return &trie_shift_by_character_to_child->second;
+        return &character_and_node->second;
     }
 
     // Performs transition in automaton
     AutomatonNode* GetNextNode(AutomatonNode* node, AutomatonNode* root,
             char character) {
-        auto automaton_shift_by_character_to_child
-            = node->automaton_transitions.find(character);
-        if (automaton_shift_by_character_to_child
-                != node->automaton_transitions.end()) {
-            return automaton_shift_by_character_to_child->second;
+        {
+            auto character_and_node
+                = node->automaton_transitions.find(character);
+            if (character_and_node != node->automaton_transitions.end()) {
+                return character_and_node->second;
+            }
         }
-        AutomatonNode* trie_shift_by_character_to_child
-            = GetTrieTransition(node, character);
-        if (trie_shift_by_character_to_child != nullptr) {
+        AutomatonNode* character_and_node = GetTrieTransition(node, character);
+        if (character_and_node != nullptr) {
             node->automaton_transitions[character]
-                = trie_shift_by_character_to_child;
-            return trie_shift_by_character_to_child;
+                = character_and_node;
+            return character_and_node;
         }
         if (node == root) {
             return node;
@@ -148,11 +144,9 @@ namespace aho_corasick {
         // Returns edges corresponding to all trie transitions from vertex
         std::vector<Edge> OutgoingEdges(AutomatonNode* vertex) const {
             std::vector<Edge> outgoing_edges;
-            for (auto &trie_shift_by_character_to_child
-                    : vertex->trie_transitions) {
-                outgoing_edges.push_back(Edge(vertex,
-                    &trie_shift_by_character_to_child.second,
-                    trie_shift_by_character_to_child.first));
+            for (auto &character_and_node : vertex->trie_transitions) {
+                outgoing_edges.emplace_back(vertex, &character_and_node.second,
+                    character_and_node.first);
             }
             return outgoing_edges;
         }
@@ -179,7 +173,7 @@ namespace aho_corasick {
                 edge.target->suffix_link = root_;
             } else {
                 edge.target->suffix_link = GetNextNode(edge.source->suffix_link,
-                    root_, edge.target->character);
+                    root_, edge.character);
             }
         }
 
@@ -282,7 +276,7 @@ namespace aho_corasick {
         template <class Callback>
         void GenerateMatches(NodeReference node, Callback on_match) {
             while (node) {
-                for (const auto& matched_string_id : node.matchedStringIds()) {
+                for (size_t matched_string_id : node.matchedStringIds()) {
                     on_match(matched_string_id);
                 }
                 node = node.terminalLink();
@@ -324,12 +318,11 @@ namespace aho_corasick {
 
         static void AddString(AutomatonNode* root, size_t string_id,
                 const std::string& string) {
-            AutomatonNode* cur_node = root;
+            AutomatonNode* node = root;
             for (char character : string) {
-                cur_node = &(cur_node->trie_transitions[character]);
-                cur_node->character = character;
+                node = &node->trie_transitions[character];
             }
-            cur_node->matched_string_ids.push_back(string_id);
+            node->matched_string_ids.push_back(string_id);
         }
 
         static void BuildSuffixLinks(Automaton* automaton) {
@@ -355,16 +348,16 @@ namespace aho_corasick {
 template <class Predicate>
 std::vector<std::string> Split(const std::string& string,
         Predicate is_delimiter) {
-    std::vector<std::string> patterns_without_wildcard;
+    std::vector<std::string> splitted_string;
     auto begin = string.cbegin();
     auto delimeter = std::find_if(begin, string.cend(), is_delimiter);
     while (delimeter != string.cend()) {
-        patterns_without_wildcard.emplace_back(std::string(begin, delimeter));
-        begin = std::next(delimeter, 1);
+        splitted_string.emplace_back(begin, delimeter);
+        begin = std::next(delimeter);
         delimeter = std::find_if(begin, string.cend(), is_delimiter);
     }
-    patterns_without_wildcard.emplace_back(std::string(begin, delimeter));
-    return patterns_without_wildcard;
+    splitted_string.emplace_back(std::string(begin, delimeter));
+    return splitted_string;
 }
 
 // Wildcard is a character that may be substituted
@@ -402,9 +395,9 @@ public:
 
     // Scans new character and calls on_match() if
     // suffix of scanned characters matches pattern
-    template<class Callback>
+    template <class Callback>
     void Scan(char character, Callback on_match) {
-        if (pattern_length_ == -1) {
+        if (!state_) {
             throw std::logic_error("Wildcard matcher wasn't initialized");
         }
         words_occurrences_by_position_.push_front(0);
