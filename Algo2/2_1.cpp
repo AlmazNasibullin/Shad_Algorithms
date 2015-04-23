@@ -41,23 +41,23 @@ namespace traverses {
     template<class Visitor, class Graph, class Vertex>
     void BreadthFirstSearch(Vertex origin_vertex, Visitor visitor,
             const Graph& graph) {
-        std::queue<Vertex> seen_unprocessed_vertexes;
+        std::queue<Vertex> unprocessed_vertexes;
         std::unordered_set<Vertex> visited_vertexes;
         
         visitor.DiscoverVertex(origin_vertex);
-        seen_unprocessed_vertexes.push(origin_vertex);
+        unprocessed_vertexes.push(origin_vertex);
         visited_vertexes.insert(origin_vertex);
         
-        while (!seen_unprocessed_vertexes.empty()) {
-            Vertex vertex = seen_unprocessed_vertexes.front();
-            seen_unprocessed_vertexes.pop();
+        while (!unprocessed_vertexes.empty()) {
+            Vertex vertex = unprocessed_vertexes.front();
+            unprocessed_vertexes.pop();
             visitor.ExamineVertex(vertex);
             for (const auto &edge : graph.OutgoingEdges(vertex)) {
                 visitor.ExamineEdge(edge);
                 Vertex target = graph.GetTarget(edge);
                 if (visited_vertexes.count(target) == 0) {
                     visitor.DiscoverVertex(target);
-                    seen_unprocessed_vertexes.push(graph.GetTarget(edge));
+                    unprocessed_vertexes.push(graph.GetTarget(edge));
                     visited_vertexes.insert(target);
                 }
             }
@@ -348,16 +348,16 @@ namespace aho_corasick {
 template <class Predicate>
 std::vector<std::string> Split(const std::string& string,
         Predicate is_delimiter) {
-    std::vector<std::string> splitted_string;
+    std::vector<std::string> substrings;
     auto begin = string.cbegin();
     auto delimeter = std::find_if(begin, string.cend(), is_delimiter);
     while (delimeter != string.cend()) {
-        splitted_string.emplace_back(begin, delimeter);
+        substrings.emplace_back(begin, delimeter);
         begin = std::next(delimeter);
         delimeter = std::find_if(begin, string.cend(), is_delimiter);
     }
-    splitted_string.emplace_back(std::string(begin, delimeter));
-    return splitted_string;
+    substrings.emplace_back(begin, delimeter);
+    return substrings;
 }
 
 // Wildcard is a character that may be substituted
