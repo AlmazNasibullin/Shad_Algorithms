@@ -1,91 +1,160 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
-typedef std::vector<std::vector<int> > adjacency_lists;
+namespace traverses {
 
-void DFSDirected(int vertex, const adjacency_lists& direct,
-        std::vector<int> &order, std::vector<bool>& used) {
-    used[vertex] = true;
-    for (int target : direct[vertex]) {
-        if (!used[target]) {
-            DFSDirected(target, direct, order, used);
-        }
-    }
-    order.push_back(vertex);
-}
+    template<class Visitor, class Graph, class Vertex>
+    void DepthFirstSearch(Vertex origin_vertex,
+                        Visitor& visitor,
+                        const Graph& graph,
+                        const std::vector<Vertex>& traversal) {}
 
-void DFSInversed(int vertex, const adjacency_lists& inverse,
-        std::vector<bool> &component, std::vector<bool>& used) {
-    used[vertex] = true;
-    component[vertex] = true;
-    for (int target : inverse[vertex]) {
-        if (!used[target]) {
-            DFSInversed(target, inverse, component, used);
-        }
-    }
-}
+    template<class Visitor, class Graph, class Vertex>
+    void DFSVisit(Vertex origin_vertex,
+                Visitor& visitor,
+                const Graph& graph,
+                std::unordered_set<Vertex>& visited_vertexes) {}
 
-void ExamineComponent(const std::vector<bool>& component,
-        const adjacency_lists& inverse, int& minComponentSize) {
-    int vertexCnt = static_cast<int>(component.size());
-    int componentSize = 0;
-    for (int vertex = 0; vertex < vertexCnt; ++vertex) {
-        if (component[vertex]) {
-            for (int target : inverse[vertex]) {
-                if (!component[target]) {
-                    return;
-                }
-            }
-            ++componentSize;
-        }
-    }
-    minComponentSize = std::min(minComponentSize, componentSize);
-}
+    template<class Vertex, class Edge>
+    class DfsVisitor {
+    public:
+        virtual void DiscoverVertex(Vertex /*vertex*/) {}
+        virtual void ExamineEdge(const Edge& /*edge*/) {}
+        virtual void FinishVertex(Vertex /*vertex*/) {}
+        virtual void DiscoverComponent() {}
+        virtual ~DfsVisitor() {}
+    };
 
-void ReadGraph(adjacency_lists& direct, adjacency_lists& inverse) {
-    int vertexCount, edgeCount;
-    std::cin >> vertexCount >> edgeCount;
-    direct.resize(vertexCount);
-    inverse.resize(vertexCount);
-    for (int i = 0; i < edgeCount; ++i) {
-        int source, target, weight;
-        std::cin >> source >> target >> weight;
-        if (weight == 1) {
-            direct[source - 1].push_back(target - 1);
-            inverse[target - 1].push_back(source - 1);
-        } else if (weight == 2) {
-            direct[target - 1].push_back(source - 1);
-            inverse[source - 1].push_back(target - 1);
-        }
-    }
-}
+} // namespace traverses
 
-int FindMaxCompanySize(const adjacency_lists& direct,
-        const adjacency_lists& inverse) {
-    int vertexCount = static_cast<int>(direct.size());
-    std::vector<bool> used(vertexCount, false);
-    std::vector<int> order;
-    for (int i = 0; i< vertexCount; ++i) {
-        if (!used[i]) {
-            DFSDirected(i, direct, order, used);
-        }
+struct GameResult {
+    int first_candidate, second_candidate;
+    int outcome;
+
+    GameResult(int first_candidate,
+                int second_candidate,
+                int outcome) :
+        first_candidate(first_candidate),
+        second_candidate(second_candidate),
+        outcome(outcome) {
     }
-    used.assign(vertexCount, false);
-    int minComponentSize = vertexCount;
-    for (int i = 0; i < vertexCount; ++i) {
-        int vertex = order[vertexCount - 1 - i];
-        if (!used[vertex]) {
-            std::vector<bool> component(vertexCount, false);
-            DFSInversed(vertex, inverse, component, used);
-            ExamineComponent(component, inverse, minComponentSize);
+};
+
+class CompanyGraph {
+public:
+    struct Edge {
+        Edge(int first_candidate, int second_candidate):
+            first_candidate(first_candidate),
+            second_candidate(second_candidate) {
         }
+
+        int first_candidate;
+        int second_candidate;
+    };
+
+    std::vector<Edge> OutgoingEdges(int candidate) const {}
+
+    int GetTarget(const Edge& edge) const {
+        return edge.second_candidate;
     }
-    return vertexCount - (minComponentSize - 1);
-}
+
+public:
+    explicit CompanyGraph(int candidates_number) {
+        relationships.resize(candidates_number);
+    }
+
+    void AddRelationship(int first_candidate, int second_candidate) {
+        relationships[first_candidate].push_back(second_candidate);
+    }
+
+public:
+    std::vector<std::vector<int> > relationships;
+};
+
+
+namespace components_builder {
+    
+    class OrderBuilder : public traverses::DfsVisitor<int, CompanyGraph::Edge> {
+    public:
+        void FinishVertex(int vertex) {
+            order.push_back(vertex);
+        }
+
+        std::vector<int> GetOrder() const {
+            return order;
+        }
+
+    private:
+        std::vector<int> order;
+    };
+
+    class ComponentsBuilder : public traverses::DfsVisitor<int, CompanyGraph::Edge> {
+    public:
+        void DiscoverVertex(int vertex) {
+            component.push_back(vertex);
+        }
+
+        void DiscoverComponent() {
+            components.push_back(component);
+            component.clear();
+        }
+
+        std::vector<std::vector<int> > GetComponents() const {
+            return components;
+        }
+
+    private:
+        std::vector<int> component;
+        std::vector<std::vector<int> > components;
+    };
+
+} // namespace components_builder
+
+class MaxCompanyBuilder {
+public:
+    explicit MaxCompanyBuilder(int candidates_number):
+            candidates_number(candidates_number),
+            directed(CompanyGraph(candidates_number)),
+            inverse(CompanyGraph(candidates_number)) { 
+    }
+
+    void Init(const std::vector<GameResult>& games_results) {}
+
+    int FindMaxCompanySize() {
+        std::vector<std::vector<int> > components = FindComponents();
+        // root component = no incoming edges
+        int min_root_component_size = FindMinRootComponentSize(components);
+        return candidates_number - (min_root_component_size - 1);
+    }
+
+private:
+    std::vector<std::vector<int> > FindComponents() {}
+
+    // root component = no incoming edges
+    int FindMinRootComponentSize(const std::vector<std::vector<int> >&
+            components) {}
+
+    bool CheckPresenceOfIncomingEdges(const std::vector<int> & component,
+                                    const std::vector<bool>&
+                                    other_view_of_component) {}
+
+private:
+    CompanyGraph directed, inverse;
+    int candidates_number;
+};
+
+std::vector<GameResult> ReadGamesResults(int candidates_number,
+                                        int games_number) {}
 
 int main() {
-    adjacency_lists direct, inverse;
-    ReadGraph(direct, inverse);
-    std::cout << FindMaxCompanySize(direct, inverse) << "\n";
+    int candidates_number, games_number;
+    std::cin >> candidates_number >> games_number;
+    std::vector<GameResult> games_results = ReadGamesResults(candidates_number,
+                                                            games_number);
+    MaxCompanyBuilder mcb(candidates_number);
+    mcb.Init(games_results);
+    std::cout << mcb.FindMaxCompanySize() << std::endl;
+    return 0;
 }
