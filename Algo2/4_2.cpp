@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <unordered_set>
 #include <iterator>
+#include <set>
 
 using std::vector;
 
@@ -23,44 +24,85 @@ private:
     Iterator begin_, end_;
 };
 
-template <class Edge>
-class Graph {
-public:
-    typedef IteratorRange<typename vector<Edge>::const_iterator> Edges;
+namespace graph {
+    
+    template <class Edge>
+    class Graph {
+    public:
+        typedef IteratorRange<typename vector<Edge>::const_iterator> OutEdgesRange;
 
-    explicit Graph(int vertexes_number) {
-        adjacency_lists.resize(vertexes_number);
-    }
+        Graph() {}
 
-    void AddEdge(const Edge& edge) {
-        adjacency_lists[edge.GetSource()].push_back(edge);
-    }
+        explicit Graph(int vertexes_number) {
+            adjacency_lists.resize(vertexes_number);
+        }
 
-    Edges OutgoingEdges(int vertex) const {
-        return Edges(adjacency_lists[vertex].begin(), adjacency_lists[vertex].end());
-    }
+        void AddEdge(const Edge& edge) {
+            adjacency_lists[edge.GetSource()].push_back(edge);
+        }
 
-    size_t GetVertexesNumber() const {
-        return adjacency_lists.size();
-    }
+        OutEdgesRange OutgoingEdges(int vertex) const {
+            return OutEdgesRange(adjacency_lists[vertex].begin(), adjacency_lists[vertex].end());
+        }
 
-private:
-    vector<vector<Edge>> adjacency_lists;
-};
+        size_t GetOutValency(int vertex) const {
+            return adjacency_lists[vertex].size();
+        }
 
-template <class Graph>
-Graph FindInverseGraph(const Graph& graph) {}
+        size_t VertexesNumber() const {
+            return adjacency_lists.size();
+        }
+
+    private:
+        vector<vector<Edge>> adjacency_lists;
+    };
+
+    template <class Graph>
+    Graph TransposeGraph(const Graph& graph) {}
+
+    template <class Graph>
+    vector<size_t> FindOutVertexesValency(const Graph& graph) {}
+
+    struct Edge {
+        Edge() : source(-1), target(-1) {}
+
+        Edge(int source, int target) : source(source), target(target) {}
+
+        int GetSource() const {
+            return source;
+        }
+
+        int GetTarget() const {
+            return target;
+        }
+
+        Edge Reverse() const {
+            return Edge(target, source);
+        }
+
+        bool operator< (const Edge& edge) const {
+            if (source != edge.source) {
+                return source < edge.source;
+            }
+            return target < edge.target;
+        }
+
+        int source;
+        int target;
+    };
+
+} // namespace graph
 
 namespace traverses {
 
     template<class Visitor, class Graph, class VertexIterator>
-    void DepthFirstSearchAllGraph(Visitor& visitor,
+    void DepthFirstSearchGraph(Visitor& visitor,
                         const Graph& graph,
                         VertexIterator begin,
                         VertexIterator end) {}
 
     template<class Visitor, class Graph, class Vertex>
-    void DFSOneComponent(Vertex origin_vertex,
+    void DepthFirstSearchComponent(Vertex origin_vertex,
                 Visitor& visitor,
                 const Graph& graph,
                 std::unordered_set<Vertex>& visited_vertexes) {}
@@ -76,11 +118,57 @@ namespace traverses {
 
 } // namespace traverses
 
+namespace components_builder {
+
+    template <class Iterator>
+    class OrderBuilder : public traverses::DfsVisitor<int> {
+    public:
+        explicit OrderBuilder(Iterator position) : position(position) {}
+
+        void FinishVertex(int vertex) {
+            *position = vertex;
+            ++position;
+        }
+
+    private:
+        Iterator position;
+    };
+
+    template <class Iterator>
+    class ComponentsBuilder : public traverses::DfsVisitor<int> {
+    public:
+        explicit ComponentsBuilder(Iterator position) : position(position),
+                                                        current_component(-1) {}
+
+        void DiscoverVertex(int vertex) {
+            *(position + vertex) = current_component;
+        }
+
+        void DiscoverComponent() {
+            ++current_component;
+        }
+
+    private:
+        Iterator position;
+        int current_component;
+    };
+
+    // функция возвращает массив размера кол-во вершин; массив описывает принадлежность
+    // вершины соответствующей компоненте сильной связности
+    template <class Graph>
+    vector<int> FindStronglyConnectedComponents(const Graph& graph) {}
+
+    template <class Graph>
+    graph::Graph<graph::Edge> CondenceGraph(const vector<int>& components,
+                                            const Graph& initial_graph) {}
+
+} // namespace components_builder
+
 struct GameResult {
     enum Outcome {
-        win = 1,
-        loss,
-        draw
+        WIN = 1,
+        LOSS,
+        DRAW
     };
 
     GameResult(int first_candidate,
@@ -95,79 +183,8 @@ struct GameResult {
     Outcome outcome;
 };
 
-struct Relationship {
-    Relationship(int first_candidate, int second_candidate):
-        first_candidate(first_candidate),
-        second_candidate(second_candidate) {
-    }
-
-    int GetSource() const {
-        return first_candidate;
-    }
-
-    int GetTarget() const {
-        return second_candidate;
-    }
-
-    Relationship Inverte() const {
-        return Relationship(second_candidate, first_candidate);
-    }
-
-    int first_candidate;
-    int second_candidate;
-};
-
-namespace components_builder {
-    
-    class OrderBuilder : public traverses::DfsVisitor<int> {
-    public:
-        void FinishVertex(int vertex) {
-            order.push_back(vertex);
-        }
-
-        vector<int> GetOrder() const {
-            return order;
-        }
-
-    private:
-        vector<int> order;
-    };
-
-    class ComponentsBuilder : public traverses::DfsVisitor<int> {
-    public:
-        void DiscoverVertex(int vertex) {
-            components.back().push_back(vertex);
-        }
-
-        void DiscoverComponent() {
-            components.push_back(vector<int>());
-        }
-
-        vector<vector<int>> GetComponents() const {
-            return components;
-        }
-
-    private:
-        vector<vector<int>> components;
-    };
-
-    template <class Graph>
-    vector<vector<int>> FindComponents(const Graph& graph) {}
-
-} // namespace components_builder
-
-Graph<Relationship> MakeRelationshipsGraph(const vector<GameResult>& games_results,
-                                            int candidates_number) {}
-
-template <class Graph>
-bool CheckPresenceOfIncomingEdges(const vector<int> & component,
-                                const vector<bool>& other_view_of_component,
-                                const Graph& inverse) {}
-
-template <class Graph>
-int FindMinRootComponentSize(const vector<vector<int>>& components,
-                            int candidates_number,
-                            const Graph& inverse) {}
+graph::Graph<graph::Edge> MakeRelationshipsGraph(const vector<GameResult>& games_results,
+                                                int candidates_number) {}
 
 int FindMaxCompanySize(int candidates_number, const vector<GameResult>& games_results) {}
 
