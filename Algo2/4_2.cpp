@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <iterator>
 #include <set>
+#include <boost/range/counting_range.hpp>
 
 using std::vector;
 
@@ -30,6 +31,7 @@ namespace graph {
     class Graph {
     public:
         typedef IteratorRange<typename vector<Edge>::const_iterator> OutEdgesRange;
+        typedef Edge edge_type;
 
         Graph() {}
 
@@ -37,7 +39,7 @@ namespace graph {
             adjacency_lists.resize(vertexes_number);
         }
 
-        void AddEdge(const Edge& edge) {
+        void AddEdge(const edge_type& edge) {
             adjacency_lists[edge.GetSource()].push_back(edge);
         }
 
@@ -54,14 +56,30 @@ namespace graph {
         }
 
     private:
-        vector<vector<Edge>> adjacency_lists;
+        vector<vector<edge_type>> adjacency_lists;
     };
 
     template <class Graph>
-    Graph TransposeGraph(const Graph& graph) {}
+    Graph TransposeGraph(const Graph& graph) {
+        int vertexes_number = static_cast<int>(graph.VertexesNumber());
+        Graph transposedGraph(vertexes_number);
+        for (int vertex = 0; vertex < vertexes_number; ++vertex) {
+            for (const auto& edge : graph.OutgoingEdges(vertex)) {
+                transposedGraph.AddEdge(edge.Reverse());
+            }
+        }
+        return transposedGraph;
+    }
 
     template <class Graph>
-    vector<size_t> FindOutVertexesValency(const Graph& graph) {}
+    vector<size_t> FindOutVertexesValency(const Graph& graph) {
+        int vertexes_number = static_cast<int>(graph.VertexesNumber());
+        vector<size_t> out_vertexes_valency(vertexes_number);
+        for (int vertex = 0; vertex < vertexes_number; ++vertex) {
+            out_vertexes_valency[vertex] = graph.GetOutValency(vertex);
+        }
+        return out_vertexes_valency;
+    }
 
     struct Edge {
         Edge() : source(-1), target(-1) {}
@@ -99,13 +117,36 @@ namespace traverses {
     void DepthFirstSearchGraph(Visitor& visitor,
                         const Graph& graph,
                         VertexIterator begin,
-                        VertexIterator end) {}
+                        VertexIterator end) {
+
+        std::unordered_set<typename std::iterator_traits<VertexIterator>::value_type>
+            visited_vertexes;
+
+        for (; begin != end; ++begin) {
+            if (visited_vertexes.count(*begin) == 0) {
+                visitor.DiscoverComponent();
+                DepthFirstSearchComponent(*begin, visitor, graph, visited_vertexes);
+            }
+        }
+    }
 
     template<class Visitor, class Graph, class Vertex>
     void DepthFirstSearchComponent(Vertex origin_vertex,
                 Visitor& visitor,
                 const Graph& graph,
-                std::unordered_set<Vertex>& visited_vertexes) {}
+                std::unordered_set<Vertex>& visited_vertexes) {
+        visitor.DiscoverVertex(origin_vertex);
+        visited_vertexes.insert(origin_vertex);
+        
+        for (const auto &edge : graph.OutgoingEdges(origin_vertex)) {
+            Vertex target = edge.GetTarget();
+            if (visited_vertexes.count(target) == 0) {
+                DepthFirstSearchComponent(target, visitor, graph, visited_vertexes);
+            }
+        }
+        
+        visitor.FinishVertex(origin_vertex);
+    }
 
     template<class Vertex>
     class DfsVisitor {
@@ -156,11 +197,52 @@ namespace components_builder {
     // функция возвращает массив размера кол-во вершин; массив описывает принадлежность
     // вершины соответствующей компоненте сильной связности
     template <class Graph>
-    vector<int> FindStronglyConnectedComponents(const Graph& graph) {}
+    vector<int> FindStronglyConnectedComponents(const Graph& graph) {
+        vector<int> backward_order(graph.VertexesNumber());
+        OrderBuilder<vector<int>::iterator> order_builder(backward_order.begin());
+        { // прямой обход 
+            traverses::DepthFirstSearchGraph(order_builder,
+                                            graph,
+                                            boost::counting_iterator<int>(0),
+                                            boost::counting_iterator<int>(graph.VertexesNumber()));
+        }
+        { // обратный обход
+            std::reverse(backward_order.begin(), backward_order.end());
+            vector<int> components(graph.VertexesNumber());
+            ComponentsBuilder<vector<int>::iterator> components_builder(components.begin());
+            traverses::DepthFirstSearchGraph(components_builder,
+                                            graph::TransposeGraph(graph),
+                                            backward_order.begin(),
+                                            backward_order.end());
+            return components;
+        }
+    }
 
     template <class Graph>
     graph::Graph<graph::Edge> CondenceGraph(const vector<int>& components,
-                                            const Graph& initial_graph) {}
+                                            const Graph& initial_graph) {
+        int components_number = 1;
+        for (int component_number : components) {
+            components_number = std::max(components_number, component_number + 1);
+        }
+        int vertexes_number = static_cast<int>(initial_graph.VertexesNumber());
+        std::set<graph::Edge> edges_in_condence_graph;
+
+        for (int vertex = 0; vertex < vertexes_number; ++vertex) {
+            for (const auto& edge : initial_graph.OutgoingEdges(vertex)) {
+                if (components[edge.GetSource()] != components[edge.GetTarget()]) {
+                   edges_in_condence_graph.insert(graph::Edge(components[edge.GetSource()],
+                                                                components[edge.GetTarget()]));
+               }
+            }
+        }
+
+        graph::Graph<graph::Edge> condece_graph(components_number);
+        for (auto& edge : edges_in_condence_graph) {
+            condece_graph.AddEdge(edge);    
+        }
+        return condece_graph;
+    }
 
 } // namespace components_builder
 
@@ -184,11 +266,63 @@ struct GameResult {
 };
 
 graph::Graph<graph::Edge> MakeRelationshipsGraph(const vector<GameResult>& games_results,
-                                                int candidates_number) {}
+                                                int candidates_number) {
+    graph::Graph<graph::Edge> relationshipsGraph(candidates_number);
+    for (const auto& game_result : games_results) {
+        GameResult::Outcome outcome = game_result.outcome;
+        if (outcome == GameResult::Outcome::WIN) {
+            relationshipsGraph.AddEdge(graph::Edge(game_result.first_candidate,
+                                                    game_result.second_candidate));
+        } else if (outcome == GameResult::Outcome::LOSS) {
+            relationshipsGraph.AddEdge(graph::Edge(game_result.second_candidate,
+                                                    game_result.first_candidate));
+        }
+    }
+    return relationshipsGraph;
+}
 
-int FindMaxCompanySize(int candidates_number, const vector<GameResult>& games_results) {}
+int FindMaxCompanySize(int candidates_number, const vector<GameResult>& games_results) {
+    graph::Graph<graph::Edge> relationshipsGraph = MakeRelationshipsGraph(games_results,
+                                                                            candidates_number);
+    vector<int> components;
+    components = components_builder::FindStronglyConnectedComponents(relationshipsGraph);
+    graph::Graph<graph::Edge> condece_graph;
+    condece_graph = components_builder::CondenceGraph(components, relationshipsGraph);
 
-vector<GameResult> ReadGamesResults() {}
+    vector<size_t> vertexes_incoming_valency_of_condence_graph = graph::FindOutVertexesValency(
+        graph::TransposeGraph(condece_graph));
+
+    vector<int> components_sizes(condece_graph.VertexesNumber());
+    for (int component_number : components) {
+        ++components_sizes[component_number];
+    }
+    
+    int min_root_component_size = candidates_number;
+    for (size_t component = 0; component < condece_graph.VertexesNumber(); ++component) {
+        if (vertexes_incoming_valency_of_condence_graph[component] == 0) {
+            min_root_component_size = std::min(min_root_component_size,
+                                                components_sizes[component]);
+        }
+    }
+    return candidates_number - min_root_component_size + 1;
+}
+
+vector<GameResult> ReadGamesResults() {
+    int games_number;
+    std::cin >> games_number;
+    
+    vector<GameResult> games_results;
+    for (int i = 0; i < games_number; ++i) {
+        int first_candidate;
+        int second_candidate;
+        int outcome;
+        std::cin >> first_candidate >> second_candidate >> outcome;
+        games_results.emplace_back(first_candidate - 1,
+                                    second_candidate - 1,
+                                    static_cast<GameResult::Outcome>(outcome));
+    }
+    return games_results;
+}
 
 int main() {
     int candidates_number;
